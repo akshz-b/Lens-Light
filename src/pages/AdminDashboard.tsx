@@ -10,14 +10,7 @@ import {
   X,
   Check,
 } from "lucide-react";
-
-interface Photo {
-  id: string;
-  url: string;
-  public_id: string;
-  caption: string;
-  category: string;
-}
+import { Photo } from "../types";
 
 export default function AdminDashboard() {
   const [photos, setPhotos] = useState<Photo[]>([]);

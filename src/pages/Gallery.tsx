@@ -1,14 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Camera, Instagram, Twitter, Mail, X, ChevronLeft, ChevronRight } from "lucide-react";
-
-interface Photo {
-  id: string;
-  url: string;
-  public_id: string;
-  caption: string;
-  category: string;
-}
+import { Photo } from "../types";
 
 export default function Gallery() {
   const [photos, setPhotos] = useState<Photo[]>([]);
