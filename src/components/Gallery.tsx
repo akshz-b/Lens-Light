@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { Camera, Instagram, Twitter, Mail, X, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Photo {
-  id: number;
+  id: string;
   url: string;
   public_id: string;
   caption: string;

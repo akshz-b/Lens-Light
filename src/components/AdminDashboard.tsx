@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 
 interface Photo {
-  id: number;
+  id: string;
   url: string;
   public_id: string;
   caption: string;
@@ -92,7 +92,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this photo?")) return;
 
     try {

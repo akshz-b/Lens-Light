@@ -1,6 +1,5 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
-import Database from 'better-sqlite3';
 import multer from 'multer';
 import jwt from 'jsonwebtoken';
 import path from 'path';
@@ -8,6 +7,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { v2 as cloudinary } from 'cloudinary';
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
+import mongoose from 'mongoose';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,18 +17,33 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// Setup SQLite Database
-const db = new Database('photos.db');
-db.exec(`
-  CREATE TABLE IF NOT EXISTS photos_v2 (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    url TEXT NOT NULL,
-    public_id TEXT NOT NULL,
-    caption TEXT,
-    category TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+// Connect to MongoDB
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/portfolio';
+mongoose.connect(MONGODB_URI).then(() => {
+  console.log('Connected to MongoDB');
+}).catch(err => {
+  console.error('MongoDB connection error:', err);
+});
+
+// Define Photo Schema
+const photoSchema = new mongoose.Schema({
+  url: { type: String, required: true },
+  public_id: { type: String, required: true },
+  caption: { type: String, default: '' },
+  category: { type: String, default: 'Uncategorized' },
+  created_at: { type: Date, default: Date.now }
+});
+
+// Transform _id to id for frontend compatibility
+photoSchema.set('toJSON', {
+  transform: (document, returnedObject: any) => {
+    returnedObject.id = returnedObject._id.toString();
+    delete returnedObject._id;
+    delete returnedObject.__v;
+  }
+});
+
+const Photo = mongoose.model('Photo', photoSchema);
 
 // Configure Cloudinary
 cloudinary.config({
@@ -75,59 +90,68 @@ app.post('/api/login', (req, res) => {
   }
 });
 
-app.get('/api/photos', (req, res) => {
+app.get('/api/photos', async (req, res) => {
   const { category } = req.query;
-  let photos;
-  if (category && category !== 'All') {
-    photos = db.prepare('SELECT * FROM photos_v2 WHERE category = ? ORDER BY created_at DESC').all(category);
-  } else {
-    photos = db.prepare('SELECT * FROM photos_v2 ORDER BY created_at DESC').all();
+  try {
+    let query = {};
+    if (category && category !== 'All') {
+      query = { category };
+    }
+    const photos = await Photo.find(query).sort({ created_at: -1 });
+    res.json(photos);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch photos' });
   }
-  res.json(photos);
 });
 
-app.post('/api/photos', authenticateToken, upload.single('photo'), (req, res) => {
+app.post('/api/photos', authenticateToken, upload.single('photo'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
   
-  const { caption, category } = req.body;
-  const url = req.file.path;
-  const public_id = req.file.filename;
-  
-  const stmt = db.prepare('INSERT INTO photos_v2 (url, public_id, caption, category) VALUES (?, ?, ?, ?)');
-  const info = stmt.run(url, public_id, caption || '', category || 'Uncategorized');
-  
-  res.json({ id: info.lastInsertRowid, url, public_id, caption, category });
+  try {
+    const { caption, category } = req.body;
+    const newPhoto = await Photo.create({
+      url: req.file.path,
+      public_id: req.file.filename,
+      caption: caption || '',
+      category: category || 'Uncategorized'
+    });
+    res.json(newPhoto);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save photo' });
+  }
 });
 
-app.put('/api/photos/:id', authenticateToken, (req, res) => {
-  const { id } = req.params;
-  const { caption, category } = req.body;
-  
-  const stmt = db.prepare('UPDATE photos_v2 SET caption = ?, category = ? WHERE id = ?');
-  stmt.run(caption, category, id);
-  
-  res.json({ success: true });
+app.put('/api/photos/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { caption, category } = req.body;
+    await Photo.findByIdAndUpdate(id, { caption, category });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update photo' });
+  }
 });
 
 app.delete('/api/photos/:id', authenticateToken, async (req, res) => {
-  const { id } = req.params;
-  
-  // Get public_id to delete from Cloudinary
-  const photo = db.prepare('SELECT public_id FROM photos_v2 WHERE id = ?').get(id) as any;
-  if (photo && photo.public_id) {
-    try {
-      await cloudinary.uploader.destroy(photo.public_id);
-    } catch (err) {
-      console.error('Failed to delete from Cloudinary:', err);
+  try {
+    const { id } = req.params;
+    const photo = await Photo.findById(id);
+    
+    if (photo && photo.public_id) {
+      try {
+        await cloudinary.uploader.destroy(photo.public_id);
+      } catch (err) {
+        console.error('Failed to delete from Cloudinary:', err);
+      }
     }
+    
+    await Photo.findByIdAndDelete(id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete photo' });
   }
-  
-  const stmt = db.prepare('DELETE FROM photos_v2 WHERE id = ?');
-  stmt.run(id);
-  
-  res.json({ success: true });
 });
 
 // Serve static files from public directory
