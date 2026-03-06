@@ -7,14 +7,26 @@ import cloudinary from '../config/cloudinary.ts';
 const router = express.Router();
 
 router.get('/', async (req, res) => {
-  const { category } = req.query;
+  const { category, page = '1', limit = '15' } = req.query;
   try {
     let query = {};
     if (category && category !== 'All') {
       query = { category };
     }
-    const photos = await Photo.find(query).sort({ created_at: -1 });
-    res.json(photos);
+    
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    const photos = await Photo.find(query)
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(limitNum);
+      
+    const total = await Photo.countDocuments(query);
+    const hasMore = skip + photos.length < total;
+
+    res.json({ photos, hasMore, total });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch photos' });
   }

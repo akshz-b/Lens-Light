@@ -10,6 +10,7 @@ import {
   X,
   Check,
 } from "lucide-react";
+import { Helmet } from "react-helmet-async";
 import { Photo } from "../types";
 
 export default function AdminDashboard() {
@@ -35,9 +36,10 @@ export default function AdminDashboard() {
 
   const fetchPhotos = async () => {
     try {
-      const res = await fetch("/api/photos");
+      // Fetch a large limit for the admin dashboard to see all photos easily
+      const res = await fetch("/api/photos?limit=1000");
       const data = await res.json();
-      setPhotos(data);
+      setPhotos(data.photos || []);
     } catch (error) {
       console.error("Failed to fetch photos:", error);
     } finally {
@@ -139,6 +141,10 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-[#f5f5f5] text-neutral-900 font-sans">
+      <Helmet>
+        <title>Admin Dashboard | Lens & Light</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
       {/* Topbar */}
       <header className="bg-white border-b border-neutral-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">

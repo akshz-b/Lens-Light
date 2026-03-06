@@ -1,18 +1,43 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Camera, Instagram, Twitter, Mail, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Helmet } from "react-helmet-async";
+import { useInView } from "react-intersection-observer";
 import { Photo } from "../types";
+
+const getOptimizedUrl = (url: string, width: number = 800) => {
+  if (!url.includes('cloudinary.com')) return url;
+  return url.replace('/upload/', `/upload/c_scale,w_${width},q_auto,f_auto/`);
+};
 
 export default function Gallery() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [categories, setCategories] = useState<string[]>(["All"]);
   const [activeCategory, setActiveCategory] = useState("All");
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
+  
+  const { ref, inView } = useInView({
+    threshold: 0,
+    rootMargin: "200px",
+  });
 
   useEffect(() => {
-    fetchPhotos();
+    setPhotos([]);
+    setPage(1);
+    setHasMore(true);
+    fetchPhotos(1, true);
   }, [activeCategory]);
+
+  useEffect(() => {
+    if (inView && hasMore && !loading) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      fetchPhotos(nextPage, false);
+    }
+  }, [inView, hasMore, loading]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -41,32 +66,49 @@ export default function Gallery() {
     setSelectedPhotoIndex(selectedPhotoIndex === photos.length - 1 ? 0 : selectedPhotoIndex + 1);
   };
 
-  const fetchPhotos = async () => {
-    setLoading(true);
+  const fetchPhotos = async (pageNum: number, isNewCategory: boolean = false) => {
+    if (isNewCategory) setLoading(true);
     try {
       const url =
         activeCategory === "All"
-          ? "/api/photos"
-          : `/api/photos?category=${activeCategory}`;
+          ? `/api/photos?page=${pageNum}&limit=15`
+          : `/api/photos?category=${activeCategory}&page=${pageNum}&limit=15`;
       const res = await fetch(url);
       const data = await res.json();
-      setPhotos(data);
+      
+      setPhotos(prev => isNewCategory ? data.photos : [...prev, ...data.photos]);
+      setHasMore(data.hasMore);
 
-      if (activeCategory === "All") {
-        const uniqueCategories = Array.from(
-          new Set(data.map((p: Photo) => p.category)),
-        ) as string[];
-        setCategories(["All", ...uniqueCategories]);
+      if (activeCategory === "All" && isNewCategory) {
+        // Fetch all categories for the filter (we might need a separate endpoint for this in a real app, 
+        // but for now we'll just use the ones from the first page or keep existing)
+        // A better approach is to not overwrite categories if we already have them, 
+        // unless it's the initial load.
+        if (categories.length <= 1) {
+           // We'll leave categories as is, or fetch them separately if needed.
+           // For now, we'll just extract from the current batch.
+           const uniqueCategories = Array.from(
+             new Set(data.photos.map((p: Photo) => p.category)),
+           ) as string[];
+           setCategories((prev) => Array.from(new Set([...prev, ...uniqueCategories])));
+        }
       }
     } catch (error) {
       console.error("Failed to fetch photos:", error);
     } finally {
-      setLoading(false);
+      if (isNewCategory) setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-[#050505] text-white font-sans selection:bg-white/20">
+      <Helmet>
+        <title>Lens & Light | Photography Portfolio</title>
+        <meta name="description" content="A curated collection of moments, captured in time by Lens & Light." />
+        <meta property="og:title" content="Lens & Light | Photography Portfolio" />
+        <meta property="og:description" content="A curated collection of moments, captured in time." />
+        <meta property="og:type" content="website" />
+      </Helmet>
       {/* Header */}
       <header className="py-12 px-6 md:px-12 lg:px-24 flex flex-col items-center justify-center text-center space-y-6">
         <motion.div
@@ -133,7 +175,7 @@ export default function Gallery() {
                 onClick={() => setSelectedPhotoIndex(index)}
               >
                 <img
-                  src={photo.url}
+                  src={getOptimizedUrl(photo.url, 800)}
                   alt={photo.caption || "Photography"}
                   className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-105"
                   loading="lazy"
@@ -153,6 +195,19 @@ export default function Gallery() {
               </motion.div>
             ))}
           </motion.div>
+        )}
+        
+        {/* Infinite Scroll Trigger */}
+        {!loading && hasMore && (
+          <div ref={ref} className="flex justify-center items-center py-12">
+            <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+          </div>
+        )}
+        
+        {!loading && !hasMore && photos.length > 0 && (
+          <div className="text-center text-neutral-500 py-12 font-mono text-xs uppercase tracking-widest">
+            End of Gallery
+          </div>
         )}
       </main>
 
@@ -233,7 +288,7 @@ export default function Gallery() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.3 }}
-                src={photos[selectedPhotoIndex].url}
+                src={getOptimizedUrl(photos[selectedPhotoIndex].url, 1920)}
                 alt={photos[selectedPhotoIndex].caption || "Photography"}
                 className="max-w-full max-h-[80vh] object-contain rounded-sm shadow-2xl"
               />
