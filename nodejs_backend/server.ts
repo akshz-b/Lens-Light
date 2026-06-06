@@ -26,6 +26,10 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false
 }));
 
+if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY) {
+  console.warn("⚠️ WARNING: Cloudinary credentials are not set in the environment. Photo uploads will fail.");
+}
+
 // Rate Limiting for API
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
