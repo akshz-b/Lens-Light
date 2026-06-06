@@ -5,12 +5,13 @@ import rateLimit from 'express-rate-limit';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { connectDB } from './server/config/db.ts';
-import authRoutes from './server/routes/authRoutes.ts';
-import photoRoutes from './server/routes/photoRoutes.ts';
+import { connectDB } from './src/config/db.ts';
+import authRoutes from './src/routes/authRoutes.ts';
+import photoRoutes from './src/routes/photoRoutes.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const rootPath = path.resolve(__dirname, '..');
 
 const app = express();
 const PORT = 3000;
@@ -43,20 +44,22 @@ connectDB();
 app.use('/api', authRoutes);
 app.use('/api/photos', photoRoutes);
 
-// Serve static files from public directory
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve static files from public directory (if needed)
+app.use(express.static(path.join(rootPath, 'frontend', 'public')));
 
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
+      root: path.join(rootPath, 'frontend'),
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static(path.join(__dirname, 'dist')));
+    const distPath = path.join(rootPath, 'frontend', 'dist');
+    app.use(express.static(distPath));
     app.get('*', (req, res) => {
-      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+      res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
