@@ -8,8 +8,7 @@ const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: folderName,
-    allowed_formats: ['jpg', 'png', 'jpeg', 'webp', 'heic', 'heif'],
-    format: async (req, file) => 'webp',
+    allowed_formats: ['jpg', 'png', 'jpeg', 'webp', 'heic', 'heif']
   } as any
 });
 
